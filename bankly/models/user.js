@@ -81,17 +81,30 @@ class User {
    **/
 
   static async update(username, data) {
-    if ('username' in data) delete data.username; // don't allow username change
-    if ('password' in data) {
-      data.password = await bcrypt.hash(data.password, BCRYPT_WORK_FACTOR);
-    }
-    const { query, values } = sqlForPartialUpdate('users', data, 'username', username);
-    const result = await db.query(query, values);
-    const user = result.rows[0];
-    if (!user) throw new ExpressError('No such user', 404);
-    delete user.password;
-    return user;
+  if ('username' in data) delete data.username; // don't allow username change
+  if ('password' in data) {
+    data.password = await bcrypt.hash(data.password, BCRYPT_WORK_FACTOR);
   }
+
+  const { query, values } = sqlForPartialUpdate('users', data, 'username', username);
+  const result = await db.query(query, values);
+
+  let user = result.rows[0];
+  if (!user) throw new ExpressError('No such user', 404);
+
+  // Ensure password is present in the returned object (tests expect it)
+  if (user.password === undefined) {
+    const r2 = await db.query(
+      `SELECT username, first_name, last_name, email, phone, admin, password
+         FROM users
+         WHERE username = $1`,
+      [username]
+    );
+    user = r2.rows[0];
+  }
+
+  return user;
+}
 
   /** Delete user. Returns true.
    *
